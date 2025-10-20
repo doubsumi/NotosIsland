@@ -427,6 +427,10 @@ class SystemMonitor(QWidget):
         self.update()
         print("已清除背景图片，滚轮可调节颜色透明度")
 
+    def close(self):
+        """重写close函数"""
+        sys.exit(0)
+
     def enterEvent(self, event):
         """鼠标进入事件 - 展开窗口"""
         if not self.expanded:
