@@ -1,9 +1,7 @@
+import subprocess
 import sys
 import GPUtil
 import psutil
-import win32api
-import win32con
-import win32gui
 from PyQt5.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout,
                              QPushButton, QFileDialog)
 from PyQt5.QtCore import Qt, QTimer, QRectF
@@ -172,7 +170,7 @@ class SystemMonitor(QWidget):
 
         # 第三行 - 设置面板
         self.row3 = QHBoxLayout()
-        self.row3.setSpacing(20)  # 按钮间距增加到20px
+        self.row3.setSpacing(50)  # 按钮间距增加到20px
         self.row3.setAlignment(Qt.AlignCenter)  # 按钮居中对齐
 
         # 先创建所有按钮，然后再添加到布局
@@ -258,36 +256,83 @@ class SystemMonitor(QWidget):
 
             self.prev_net_io = current_net_io
         except Exception as e:
-            print(f"更新网络速度时出错: {str(e)}")
+            # print(f"更新网络速度时出错: {str(e)}")
+            pass
 
     def update_gpu_usage(self):
-        """使用GPUtil获取GPU使用率（支持多个GPU）"""
+        """使用隐藏窗口的方式获取GPU使用率"""
         try:
+            # 首先尝试使用 nvidia-smi 隐藏窗口获取
+            try:
+                result = subprocess.run([
+                    'nvidia-smi',
+                    '--query-gpu=utilization.gpu',
+                    '--format=csv,noheader,nounits'
+                ], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+
+                if result.returncode == 0 and result.stdout.strip():
+                    usage_values = result.stdout.strip().split('\n')
+                    if usage_values:
+                        # 取第一个GPU的使用率或计算平均值
+                        if len(usage_values) == 1:
+                            usage = float(usage_values[0].strip())
+                        else:
+                            usage = sum(float(u.strip()) for u in usage_values if u.strip()) / len(usage_values)
+
+                        self.gpu_usage = f"{usage:.0f}%"
+                        self.gpu_label.setText(f"GPU: {self.gpu_usage}")
+                        return
+            except (subprocess.SubprocessError, FileNotFoundError, ValueError):
+                # 如果 nvidia-smi 失败，回退到 GPUtil
+                pass
+
+            # 回退到 GPUtil 获取
             gpus = GPUtil.getGPUs()
             if gpus:
                 if len(gpus) == 1:
                     # 单个GPU
                     gpu = gpus[0]
                     self.gpu_usage = f"{gpu.load * 100:.0f}%"
-                    self.gpu_label.setText(f"GPU: {self.gpu_usage}")
                 else:
-                    # 多个GPU，显示平均使用率或主要GPU使用率
+                    # 多个GPU，显示平均使用率
                     total_usage = sum(gpu.load for gpu in gpus)
                     avg_usage = total_usage / len(gpus)
                     self.gpu_usage = f"{avg_usage * 100:.0f}%"
-                    self.gpu_label.setText(f"GPU: {self.gpu_usage}")
             else:
                 self.gpu_usage = "N/A"
-                self.gpu_label.setText(f"GPU: {self.gpu_usage}")
 
         except Exception as e:
-            print(f"获取GPU使用率时出错: {str(e)}")
+            # print(f"获取GPU使用率时出错: {str(e)}")
             self.gpu_usage = "Err"
-            self.gpu_label.setText(f"GPU: {self.gpu_usage}")
+        self.gpu_label.setText(f"GPU: {self.gpu_usage}")
 
     def update_temperatures(self):
-        """使用GPUtil获取GPU温度（支持多个GPU）"""
+        """使用隐藏窗口的方式获取GPU温度"""
         try:
+            # 使用 nvidia-smi 隐藏窗口获取温度
+            try:
+                result = subprocess.run([
+                    'nvidia-smi',
+                    '--query-gpu=temperature.gpu',
+                    '--format=csv,noheader,nounits'
+                ], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+
+                if result.returncode == 0 and result.stdout.strip():
+                    temp_values = result.stdout.strip().split('\n')
+                    if temp_values and temp_values[0].strip():
+                        if len(temp_values) == 1:
+                            temp = float(temp_values[0].strip())
+                        else:
+                            temp = sum(float(t.strip()) for t in temp_values if t.strip()) / len(temp_values)
+
+                        self.gpu_temp = f"{temp:.0f}°C"
+                        self.gpu_temp_label.setText(f"GPU: {self.gpu_temp}")
+                        return
+            except (subprocess.SubprocessError, FileNotFoundError, ValueError):
+                # 如果 nvidia-smi 失败，回退到 GPUtil
+                pass
+
+            # 回退到 GPUtil 获取温度
             gpus = GPUtil.getGPUs()
             if gpus:
                 if len(gpus) == 1:
@@ -298,7 +343,7 @@ class SystemMonitor(QWidget):
                     else:
                         self.gpu_temp = "N/A"
                 else:
-                    # 多个GPU，显示平均温度或主要GPU温度
+                    # 多个GPU，显示平均温度
                     valid_temps = [gpu.temperature for gpu in gpus
                                    if hasattr(gpu, 'temperature') and gpu.temperature is not None]
                     if valid_temps:
@@ -310,7 +355,7 @@ class SystemMonitor(QWidget):
                 self.gpu_temp = "N/A"
 
         except Exception as e:
-            print(f"获取GPU温度时出错: {str(e)}")
+            # print(f"获取GPU温度时出错: {str(e)}")
             self.gpu_temp = "Err"
         self.gpu_temp_label.setText(f"GPU: {self.gpu_temp}")
 
@@ -333,7 +378,8 @@ class SystemMonitor(QWidget):
             # 更新前值
             self.prev_disk_io = current_disk_io
         except Exception as e:
-            print(f"更新磁盘速度时出错: {str(e)}")
+            # print(f"更新磁盘速度时出错: {str(e)}")
+            pass
 
     def format_speed(self, bytes):
         """格式化速度显示"""
@@ -425,7 +471,6 @@ class SystemMonitor(QWidget):
         # 重置背景颜色为默认值
         self.bg_color = QColor(20, 20, 20, 230)
         self.update()
-        print("已清除背景图片，滚轮可调节颜色透明度")
 
     def close(self):
         """重写close函数"""
@@ -495,7 +540,8 @@ class SystemMonitor(QWidget):
 
                 event.accept()
             except Exception as e:
-                print(f"双击事件处理出错: {str(e)}")
+                # print(f"双击事件处理出错: {str(e)}")
+                pass
 
     def animate_move(self, target_position):
         """QPropertyAnimation移动到目标位置"""
@@ -513,7 +559,7 @@ class SystemMonitor(QWidget):
             # 如果动画不可用，直接移动
             self.move(target_position)
         except Exception as e:
-            print(f"动画移动失败: {str(e)}")
+            # print(f"动画移动失败: {str(e)}")
             self.move(target_position)
 
     def adjust_image_alpha(self, delta):
@@ -532,7 +578,8 @@ class SystemMonitor(QWidget):
                 self.image_alpha = max(self.image_alpha - 15, 30)  # 最小透明度为30
 
         except Exception as e:
-            print(f"调节图片透明度时出错: {str(e)}")
+            # print(f"调节图片透明度时出错: {str(e)}")
+            pass
 
     def adjust_color_alpha(self, delta):
         """调节背景颜色的透明度"""
@@ -548,13 +595,14 @@ class SystemMonitor(QWidget):
                 new_alpha = min(self.bg_color.alpha() + 15, 255)
             else:
                 # 向下滚动 - 减少透明度（变得更透明）
-                new_alpha = max(self.bg_color.alpha() - 15, 30)  # 最小透明度为30
+                new_alpha = max(self.bg_color.alpha() - 15, 0)  # 允许全透明
 
             # 更新背景颜色
             self.bg_color.setAlpha(new_alpha)
 
         except Exception as e:
-            print(f"调节颜色透明度时出错: {str(e)}")
+            # print(f"调节颜色透明度时出错: {str(e)}")
+            pass
 
     def wheelEvent(self, event):
         """鼠标滚轮事件 - 改变背景透明度（支持颜色背景和图片背景）"""
@@ -577,7 +625,8 @@ class SystemMonitor(QWidget):
             event.accept()
 
         except Exception as e:
-            print(f"处理滚轮事件时出错: {str(e)}")
+            # print(f"处理滚轮事件时出错: {str(e)}")
+            pass
 
     def paintEvent(self, event):
         """绘制窗口背景和边框 - 使用圆角裁剪"""
@@ -616,23 +665,15 @@ class SystemMonitor(QWidget):
             border_rect = QRectF(self.rect().adjusted(0, 0, -1, -1))
             painter.drawRoundedRect(border_rect, radius, radius)
         except Exception as e:
-            print(f"绘制错误: {str(e)}")
+            # print(f"绘制错误: {str(e)}")
+            pass
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-
-    # 检查是否已经有一个实例在运行
+    # 不再检查是否已经有实例在运行，允许运行多个程序
     window_title = "NotosIsland"
-    if win32gui.FindWindow(None, window_title):
-        win32api.MessageBox(0, "程序已经在运行中", "系统提示", win32con.MB_ICONWARNING)
-        sys.exit(0)
-
-    try:
-        monitor = SystemMonitor()
-        monitor.setWindowTitle(window_title)
-        monitor.show()
-        sys.exit(app.exec_())
-    except Exception as e:
-        print(f"程序启动失败: {str(e)}")
-        win32api.MessageBox(0, f"程序启动失败: {str(e)}", "错误", win32con.MB_ICONERROR)
+    monitor = SystemMonitor()
+    monitor.setWindowTitle(window_title)
+    monitor.show()
+    sys.exit(app.exec_())
