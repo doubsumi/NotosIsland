@@ -159,8 +159,8 @@ class SystemMonitor(QWidget):
         self.row2.setSpacing(10)
         self.row2.setContentsMargins(25, 5, 15, 5)  # V1.2：左右边距15px，上下边距5px
 
-        self.cpu_temp_label = self.create_label("CPU: N/A°C")
-        self.gpu_temp_label = self.create_label("GPU: N/A°C")
+        self.cpu_temp_label = self.create_label("CPU: N/A")
+        self.gpu_temp_label = self.create_label("GPU: N/A")
         self.disk_label = self.create_label(": 0B/s")
 
         # 添加弹性空间使内容居中
@@ -170,7 +170,7 @@ class SystemMonitor(QWidget):
 
         # 第三行 - 设置面板
         self.row3 = QHBoxLayout()
-        self.row3.setSpacing(50)  # 按钮间距增加到20px
+        self.row3.setSpacing(50)  # 按钮间距增加到50px
         self.row3.setAlignment(Qt.AlignCenter)  # 按钮居中对齐
 
         # 先创建所有按钮，然后再添加到布局
